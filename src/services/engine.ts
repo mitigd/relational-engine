@@ -95,6 +95,84 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
   const finalize = (raw: string[]) => shuffle(raw);
 
   switch (frame) {
+    case FrameType.COORDINATION: {
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 6);
+      const activeNodes = words.slice(0, nodeCount);
+      const rawPremises: string[] = [];
+      
+      // Generate a chain: A=B=C=D...
+      for (let i = 0; i < nodeCount - 1; i++) {
+        rawPremises.push(`${activeNodes[i]} ${getCue('Same As')} ${activeNodes[i+1]}`);
+      }
+      
+      premises = finalize(injectNoise(rawPremises, words.slice(nodeCount, nodeCount + 3)));
+      
+      // Question: Relate first and last
+      const isStart = Math.random() > 0.5;
+      const targetA = activeNodes[0];
+      const targetB = activeNodes[nodeCount - 1];
+      
+      question = useNaturalLanguage
+        ? `IS ${targetA} THE SAME AS ${targetB}?`
+        : `${targetA} ${getCue('Same As')} ${targetB}?`;
+        
+      correctAnswer = "Yes";
+      options = ["Yes", "No", "Undetermined"];
+      explanation = `Coordination: Identity relations are transitive (A=B=C implies A=C).`;
+      break;
+    }
+
+    case FrameType.DISTINCTION: {
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 5);
+      const activeNodes = words.slice(0, nodeCount);
+      const rawPremises: string[] = [];
+      
+      // Create two groups. ActiveNodes[0..k] are Group A. ActiveNodes[k+1..end] are Group B.
+      // Link internals with "Same As". Link groups with "Different From" (using Opposite/Distinct cue).
+      // Let's use 'Different' mapping to 'Opposite' cue for now or a specific one if available. 
+      // Constants say 'Opposite'. We can use that implies distinctive.
+      
+      const split = Math.floor(nodeCount / 2);
+      
+      // Group 1
+      for (let i = 0; i < split; i++) {
+         rawPremises.push(`${activeNodes[i]} ${getCue('Same As')} ${activeNodes[i+1]}`);
+      }
+      // Link Group 1 to Group 2 via Difference
+      rawPremises.push(`${activeNodes[split]} ${getCue('Opposite')} ${activeNodes[split+1]}`);
+      // Group 2
+      for (let i = split + 1; i < nodeCount - 1; i++) {
+         rawPremises.push(`${activeNodes[i]} ${getCue('Same As')} ${activeNodes[i+1]}`);
+      }
+
+      premises = finalize(injectNoise(rawPremises, words.slice(nodeCount, nodeCount + 3)));
+      
+      // Pick two nodes.
+      const idxA = Math.floor(Math.random() * nodeCount);
+      let idxB = Math.floor(Math.random() * nodeCount);
+      while (idxA === idxB) idxB = Math.floor(Math.random() * nodeCount);
+      
+      const nodeA = activeNodes[idxA];
+      const nodeB = activeNodes[idxB];
+      
+      // Determine logical relation
+      // If both <= split or both > split, they are Same.
+      // If one <= split and other > split, they are Different.
+      const groupA = idxA <= split ? 1 : 2;
+      const groupB = idxB <= split ? 1 : 2;
+      
+      const areSame = groupA === groupB;
+      
+      question = useNaturalLanguage
+        ? `IS ${nodeA} DIFFERENT FROM ${nodeB}?`
+        : `${nodeA} ${getCue('Opposite')} ${nodeB}?`;
+        
+      correctAnswer = areSame ? "No" : "Yes";
+      options = ["Yes", "No", "Undetermined"];
+      explanation = `Distinction: 'Different' relations separate identity groups.`;
+      break;
+    }
+
     case FrameType.COMPARISON: {
       const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 6);
       const activeNodes = words.slice(0, nodeCount); // Truth: [0] > [1] > [2] ...
