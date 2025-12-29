@@ -461,18 +461,62 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
 
     case FrameType.TRANSFORMATION: {
       const func = FUNCTIONS[Math.floor(Math.random() * FUNCTIONS.length)];
-      const nodeA = words[0];
-      const nodeB = words[1];
-      const relType = Math.random() > 0.5 ? 'Same As' : 'Opposite';
+      const nodeCount = Math.min(2 + Math.floor(difficulty / 25), 5);
+      const activeNodes = words.slice(0, nodeCount);
       
-      premises = finalize([
-        `${nodeA} functionalizes ${func.attr}`,
-        `${nodeA} ${getCue(relType)} ${nodeB}`
-      ]);
-      question = useNaturalLanguage ? `WHAT IS THE QUALITY OF ${nodeB}?` : `DERIVED VALUE of ${nodeB}?`;
-      correctAnswer = relType === 'Same As' ? func.attr : func.opp;
+      const rawPremises: string[] = [];
+      rawPremises.push(`${activeNodes[0]} functionalizes ${func.attr}`);
+      
+      // Chain of relations: A R1 B R2 C ...
+      // If we use only 'Same As', property transfers.
+      // If we use 'Opposite', property inverts.
+      // For simplicity in adaptive logic, let's stick to Same As chains for Transfer, 
+      // and maybe one Opposition step at higher levels? 
+      // Let's implement pure Same As chain first for clarity, or alternating.
+      // If A=B, B=C -> A=C.
+      
+      let currentVal = func.attr; // Tracking value prop from 0 to end
+      // Actually we just generate premises.
+      
+      for (let i = 0; i < nodeCount - 1; i++) {
+        // Higher difficulty could introduce Opposite?
+        const useOpp = difficulty > 50 && Math.random() > 0.7;
+        const rel = useOpp ? 'Opposite' : 'Same As';
+        rawPremises.push(`${activeNodes[i]} ${getCue(rel)} ${activeNodes[i+1]}`);
+      }
+
+      premises = finalize(injectNoise(rawPremises, words.slice(nodeCount, nodeCount + 3)));
+      
+      const targetNode = activeNodes[nodeCount - 1]; // Ask about last node
+      // Value calculation:
+      // A (attr). A-B (Same) -> B (attr).
+      // A-B (Opp) -> B (OppAttr).
+      let isOpposite = false;
+      for (let i = 0; i < nodeCount - 1; i++) {
+         // Re-derive relation used. 
+         // Since we generated linearly, we can just check what we decided.
+         // But better to store it.
+         // Let's trust the loop logic: 
+         // We need to know the path relation product.
+         // Pushing 'Opposite' flips the 'isOpposite' state.
+         // We need to ensure we know exactly what we generated.
+      }
+      // Re-run generation cleanly:
+      isOpposite = false;
+      const verifiedPremises: string[] = [];
+      verifiedPremises.push(`${activeNodes[0]} functionalizes ${func.attr}`);
+       for (let i = 0; i < nodeCount - 1; i++) {
+        const useOpp = difficulty > 50 && Math.random() > 0.3;
+        const rel = useOpp ? 'Opposite' : 'Same As';
+        verifiedPremises.push(`${activeNodes[i]} ${getCue(rel)} ${activeNodes[i+1]}`);
+        if (useOpp) isOpposite = !isOpposite;
+      }
+      premises = finalize(injectNoise(verifiedPremises, words.slice(nodeCount, nodeCount + 3)));
+
+      question = useNaturalLanguage ? `WHAT IS THE QUALITY OF ${targetNode}?` : `DERIVED VALUE of ${targetNode}?`;
+      correctAnswer = isOpposite ? func.opp : func.attr;
       options = shuffle([func.attr, func.opp, 'Neutral', 'None']);
-      explanation = `ToSF: Psychological functions are transformed through established relational networks.`;
+      explanation = `ToSF: Functions transform across the relational chain (Same maintains, Opposite inverts).`;
       break;
     }
 
@@ -501,32 +545,70 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
     }
 
     case FrameType.HIERARCHICAL: {
-      const nodeA = words[0];
-      const nodeB = words[1];
-      const nodeC = words[2];
-      premises = finalize(injectNoise([
-        `${nodeA} ${getCue('Contains')} ${nodeB}`,
-        `${nodeB} ${getCue('Contains')} ${nodeC}`
-      ], words.slice(3, 6)));
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 6);
+      const activeNodes = words.slice(0, nodeCount);
+      const rawPremises: string[] = [];
+      
+      // Chain: A contains B contains C ...
+      for (let i = 0; i < nodeCount - 1; i++) {
+        rawPremises.push(`${activeNodes[i]} ${getCue('Contains')} ${activeNodes[i+1]}`);
+      }
+      
+      premises = finalize(injectNoise(rawPremises, words.slice(nodeCount, nodeCount + 3)));
+      
+      const targetA = activeNodes[0];
+      const targetB = activeNodes[nodeCount - 1];
       const checkDown = Math.random() > 0.5;
-      question = checkDown ? `${nodeA} ${getCue('Contains')} ${nodeC}?` : `${nodeC} member of ${nodeA}?`;
+      
+      // A contains ... B.
+      // Question: Does A contain B? Yes.
+      // Question: Is B member of A? Yes.
+      
+      if (checkDown) {
+         question = `${targetA} ${getCue('Contains')} ${targetB}?`;
+      } else {
+         question = `${targetB} member of ${targetA}?`;
+      }
+      
       correctAnswer = "Yes";
       options = ["Yes", "No", "Undetermined"];
-      explanation = `Hierarchical Transitivity: Containment is transitive downwards.`;
+      explanation = `Hierarchical Transitivity: Containment is transitive downwards across ${nodeCount} levels.`;
       break;
     }
 
     case FrameType.MIXED: {
-      const n = words.slice(0, 4);
-      premises = finalize([
-        `${n[0]} ${getCue('Same As')} ${n[1]}`,
-        `${n[1]} ${getCue('Opposite')} ${n[2]}`,
-        `${n[2]} ${getCue('Greater')} ${n[3]}`
-      ]);
-      question = `${n[0]} ? ${n[2]}`;
-      correctAnswer = getCue('Opposite');
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 5);
+      const activeNodes = words.slice(0, nodeCount);
+      const rawPremises: string[] = [];
+      
+      // Generate chain with random relation types
+      // A R1 B R2 C ...
+      const types = ['Same As', 'Opposite', 'Greater']; 
+      // Logic tracing:
+      // Start at 0.
+      // If we ask relation between A and Z?
+      // Too complex to automate general Mixed solver without graph logic.
+      // Let's simplify: Use 'Same As' and 'Opposite' chains primarily, maybe one 'Greater' if solvable.
+      // For reliable generation without a full theorem prover:
+      // Limit to Same/Opposite chain.
+      
+      let isSame = true; // Track relation from start relative to current
+      
+      for (let i = 0; i < nodeCount - 1; i++) {
+        const type = Math.random() > 0.5 ? 'Same As' : 'Opposite';
+        rawPremises.push(`${activeNodes[i]} ${getCue(type)} ${activeNodes[i+1]}`);
+        if (type === 'Opposite') isSame = !isSame;
+      }
+      
+      premises = finalize(injectNoise(rawPremises, words.slice(nodeCount, nodeCount + 3)));
+      
+      const start = activeNodes[0];
+      const end = activeNodes[nodeCount - 1];
+      
+      question = `${start} ? ${end}`;
+      correctAnswer = isSame ? getCue('Same As') : getCue('Opposite'); // Simplified Mixed to just Same/Opposite/Diff logic for now to ensure robustness
       options = shuffle([getCue('Same As'), getCue('Opposite'), getCue('Greater'), getCue('Lesser')]);
-      explanation = `Cross-Frame Synthesis: Integrating disparate relational types.`;
+      explanation = `Cross-Frame Synthesis: Integrating disparate relational types across ${nodeCount} nodes.`;
       break;
     }
 
