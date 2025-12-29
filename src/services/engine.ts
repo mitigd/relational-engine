@@ -104,6 +104,56 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       break;
     }
 
+    case FrameType.TEMPORAL: {
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 6);
+      const activeNodes = words.slice(0, nodeCount);
+      const rawPremises: {s: string, t: string, type: 'Before' | 'After'}[] = [];
+      
+      for (let i = 0; i < nodeCount - 1; i++) {
+        const type = Math.random() > 0.5 ? 'Before' : 'After';
+        rawPremises.push({ s: activeNodes[i], t: activeNodes[i+1], type });
+      }
+
+      const basePremises = rawPremises.map(p => `${p.s} ${getCue(p.type)} ${p.t}`);
+      premises = finalize(injectNoise(basePremises, words.slice(nodeCount, nodeCount + 3)));
+      
+      const wantEarliest = Math.random() > 0.5;
+      correctAnswer = wantEarliest ? activeNodes[0] : activeNodes[nodeCount - 1];
+      question = useNaturalLanguage 
+        ? (wantEarliest ? `WHICH HAPPENS FIRST?` : `WHICH HAPPENS LAST?`)
+        : (wantEarliest ? `TARGET: TEMPORAL START` : `TARGET: TEMPORAL END`);
+
+      options = shuffle(activeNodes.slice(0, 4));
+      if (!options.includes(correctAnswer)) options[0] = correctAnswer;
+      options = shuffle(options);
+      explanation = `Temporal Sequencing: Sequential event links require building a chronological timeline.`;
+      break;
+    }
+
+    case FrameType.SPATIAL: {
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 25), 5);
+      const activeNodes = words.slice(0, nodeCount);
+      const rawPremises: {s: string, t: string, type: 'Greater' | 'Lesser'}[] = []; // Reusing Greater/Lesser logic for Above/Below
+      
+      for (let i = 0; i < nodeCount - 1; i++) {
+        rawPremises.push({ s: activeNodes[i], t: activeNodes[i+1], type: 'Greater' });
+      }
+
+      premises = finalize(rawPremises.map(p => `${p.s} ${getCue('Greater')} ${p.t}`));
+      
+      const targetIdx = Math.floor(Math.random() * nodeCount);
+      correctAnswer = activeNodes[targetIdx];
+      
+      const queryIdx = (targetIdx + (Math.random() > 0.5 ? 1 : -1) + nodeCount) % nodeCount;
+      const rel = targetIdx < queryIdx ? 'Greater' : 'Lesser';
+      
+      question = `${activeNodes[targetIdx]} ${getCue(rel)} ${activeNodes[queryIdx]}?`;
+      correctAnswer = "Yes";
+      options = ["Yes", "No", "Undetermined"];
+      explanation = `Spatial Orientation: Positional relations define a coordinate-based network.`;
+      break;
+    }
+
     case FrameType.DEICTIC: {
       const locs = shuffle(["Ziggurat", "Nexus", "Void", "Chamber", "Aegis", "Spire"]);
       const useDoubleShift = difficulty > 45;
@@ -166,6 +216,30 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       correctAnswer = relType === 'Same As' ? func.attr : func.opp;
       options = shuffle([func.attr, func.opp, 'Neutral', 'None']);
       explanation = `ToSF: Psychological functions are transformed through established relational networks.`;
+      break;
+    }
+
+    case FrameType.CAUSAL: {
+      const nodeA = words[0];
+      const nodeB = words[1];
+      const nodeC = words[2];
+      const isDirect = difficulty < 40;
+      
+      if (isDirect) {
+        premises = finalize([`If ${nodeA}, then ${nodeB}`]);
+        question = `State of ${nodeB} given ${nodeA}?`;
+        correctAnswer = "Present";
+        options = ["Present", "Absent", "Undetermined"];
+      } else {
+        premises = finalize([
+          `If ${nodeA}, then ${nodeB}`,
+          `If ${nodeB}, then ${nodeC}`
+        ]);
+        question = `Given ${nodeA}, is ${nodeC} derived?`;
+        correctAnswer = "Yes";
+        options = ["Yes", "No", "Undetermined"];
+      }
+      explanation = `Causal Contingency: Conditional 'if-then' relations create predictive behavioral networks.`;
       break;
     }
 
