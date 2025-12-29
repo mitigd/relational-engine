@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { FrameType, type Challenge, type UserStats } from '../types';
 import { generateChallenge, ARBITRARY_CUES } from '../services/engine';
 import { FRAME_ICONS } from '../constants';
-import { ArrowRight, CheckCircle, XCircle, ChevronRight, RefreshCw, Timer, Hash, BookOpen } from 'lucide-react';
+import { ArrowRight, CheckCircle, XCircle, ChevronRight, Timer, Hash, BookOpen } from 'lucide-react';
 
 interface GameEngineProps {
   stats: UserStats;
@@ -112,7 +112,7 @@ const GameEngine: React.FC<GameEngineProps> = ({ stats, onUpdateStats }) => {
 
   const timerColor = timeLeft < 15 ? 'text-rose-500' : timeLeft < 30 ? 'text-amber-500' : 'text-blue-400';
 
-  const activeCues = !useNaturalLanguage ? Object.entries(ARBITRARY_CUES).filter(([meaning, cue]) => {
+  const activeCues = !useNaturalLanguage ? Object.entries(ARBITRARY_CUES).filter(([, cue]) => {
     const inPremises = challenge.premises.some(p => p.includes(cue));
     const inQuestion = challenge.question.includes(cue);
     const isAnswer = challenge.correctAnswer === cue;

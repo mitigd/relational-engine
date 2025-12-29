@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { FrameType, type UserStats } from './types';
 import GameEngine from './components/GameEngine';
 import StatsPanel from './components/StatsPanel';
-import { BrainCircuit, Activity, Settings, Play, BarChart3, ChevronLeft, X, ToggleLeft, ToggleRight, Info, Trash2, Languages, Cpu } from 'lucide-react';
+import { BrainCircuit, Activity, Settings, Play, BarChart3, ChevronLeft, X, ToggleLeft, ToggleRight, Trash2, Languages, Cpu } from 'lucide-react';
 
 const INITIAL_STATS: UserStats = {
   scores: {

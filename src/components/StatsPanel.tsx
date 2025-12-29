@@ -1,5 +1,5 @@
 
-import React from 'react';
+
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer } from 'recharts';
 import { FrameType, type UserStats } from '../types';
 import { FRAME_ICONS } from '../constants';

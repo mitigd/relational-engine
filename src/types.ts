@@ -1,17 +1,19 @@
 
-export enum FrameType {
-  COORDINATION = 'Coordination', // Same as
-  OPPOSITION = 'Opposition', // Opposite of
-  DISTINCTION = 'Distinction', // Different from
-  COMPARISON = 'Comparison', // More/Less than
-  HIERARCHICAL = 'Hierarchical', // Type of / Contains
-  TEMPORAL = 'Temporal', // Before / After
-  SPATIAL = 'Spatial', // Above / Below / Inside
-  CAUSAL = 'Causal', // If A then B
-  DEICTIC = 'Deictic', // I-You / Here-There / Now-Then
-  TRANSFORMATION = 'Transformation', // ToSF - Applying functions across networks
-  MIXED = 'Mixed' // Multi-frame integration
-}
+export const FrameType = {
+  COORDINATION: 'Coordination',
+  OPPOSITION: 'Opposition',
+  DISTINCTION: 'Distinction',
+  COMPARISON: 'Comparison',
+  HIERARCHICAL: 'Hierarchical',
+  TEMPORAL: 'Temporal',
+  SPATIAL: 'Spatial',
+  CAUSAL: 'Causal',
+  DEICTIC: 'Deictic',
+  TRANSFORMATION: 'Transformation',
+  MIXED: 'Mixed'
+} as const;
+
+export type FrameType = (typeof FrameType)[keyof typeof FrameType];
 
 export interface Node {
   id: string;
