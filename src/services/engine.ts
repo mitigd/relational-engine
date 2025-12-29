@@ -48,6 +48,30 @@ const solveComparison = (nodes: string[], premises: {s: string, t: string, type:
     });
   }
   return score;
+  return score;
+};
+
+const checkConnectivity = (source: string, target: string, premises: {s: string, t: string, type: 'Greater'|'Lesser'}[]) => {
+  // Build adjacency list for "s is Greater (Above) t"
+  // Premise s > t comes from s Greater t OR t Lesser s
+  const adj: Record<string, string[]> = {};
+  premises.forEach(p => {
+    const [u, v] = p.type === 'Greater' ? [p.s, p.t] : [p.t, p.s];
+    if (!adj[u]) adj[u] = [];
+    adj[u].push(v);
+  });
+
+  const queue = [source];
+  const visited = new Set<string>();
+  
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    if (curr === target) return true;
+    if (visited.has(curr)) continue;
+    visited.add(curr);
+    if (adj[curr]) queue.push(...adj[curr]);
+  }
+  return false;
 };
 
 export const generateChallenge = (frame: FrameType, difficulty: number, useNaturalLanguage: boolean = false): Challenge => {
@@ -73,23 +97,42 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
   switch (frame) {
     case FrameType.COMPARISON: {
       const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 6);
-      const activeNodes = words.slice(0, nodeCount);
-      const rawPremises: {s: string, t: string, type: 'Greater' | 'Lesser'}[] = [];
-      const indices = Array.from({length: nodeCount - 1}, (_, i) => i);
-      const shuffledIndices = shuffle(indices);
-      
-      shuffledIndices.forEach(i => {
-        const type = Math.random() > 0.5 ? 'Greater' : 'Lesser';
-        rawPremises.push({ s: activeNodes[i], t: activeNodes[i+1], type });
-      });
+      const activeNodes = words.slice(0, nodeCount); // Truth: [0] > [1] > [2] ...
+      const wantMax = Math.random() > 0.5;
+      let rawPremises: {s: string, t: string, type: 'Greater' | 'Lesser'}[] = [];
+      let finalScores: Record<string, number> = {};
+
+      let attempts = 0;
+      while (attempts < 20) {
+        rawPremises = [];
+        const premiseCount = nodeCount; 
+        for (let k = 0; k < premiseCount; k++) {
+          let i = Math.floor(Math.random() * nodeCount);
+          let j = Math.floor(Math.random() * nodeCount);
+          while (i === j) j = Math.floor(Math.random() * nodeCount);
+          if (i > j) [i, j] = [j, i]; // Ensure i < j (i is Greater)
+          
+          if (Math.random() > 0.5) {
+            rawPremises.push({ s: activeNodes[i], t: activeNodes[j], type: 'Greater' });
+          } else {
+            rawPremises.push({ s: activeNodes[j], t: activeNodes[i], type: 'Lesser' });
+          }
+        }
+        
+        finalScores = solveComparison(activeNodes, rawPremises);
+        const vals = Object.values(finalScores);
+        const targetVal = wantMax ? Math.max(...vals) : Math.min(...vals);
+        const candidates = activeNodes.filter(n => finalScores[n] === targetVal);
+        
+        if (candidates.length === 1) {
+          correctAnswer = candidates[0];
+          break;
+        }
+        attempts++;
+      }
 
       const basePremises = rawPremises.map(p => `${p.s} ${getCue(p.type)} ${p.t}`);
-      premises = finalize(injectNoise(basePremises, words.slice(nodeCount, nodeCount + 5)));
-      
-      const scores = solveComparison(activeNodes, rawPremises);
-      const wantMax = Math.random() > 0.5;
-      let sorted = [...activeNodes].sort((a, b) => scores[b] - scores[a]);
-      correctAnswer = wantMax ? sorted[0] : sorted[sorted.length - 1];
+      premises = finalize(injectNoise(basePremises, words.slice(nodeCount, nodeCount + 3)));
       
       if (useNaturalLanguage) {
         question = wantMax ? `WHICH IS THE GREATEST?` : `WHICH IS THE SMALLEST?`;
@@ -98,59 +141,140 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       }
 
       options = shuffle(activeNodes.slice(0, 4));
-      if (!options.includes(correctAnswer)) options[0] = correctAnswer;
+      if (!options.includes(correctAnswer)) options[Math.floor(Math.random() * options.length)] = correctAnswer;
       options = shuffle(options);
-      explanation = `Relational Complexity: Fragmented comparison links require you to build a mental hierarchy.`;
+      explanation = `Relational Complexity: Scrambled branching requires you to integrate disparate links into a single hierarchy.`;
       break;
     }
 
     case FrameType.TEMPORAL: {
       const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 6);
-      const activeNodes = words.slice(0, nodeCount);
-      const rawPremises: {s: string, t: string, type: 'Before' | 'After'}[] = [];
+      const activeNodes = words.slice(0, nodeCount); // Truth: [0] precedes [1] precedes [2] ...
+      const wantEarliest = Math.random() > 0.5;
+      let rawPremises: {s: string, t: string, type: 'Before' | 'After'}[] = [];
       
-      for (let i = 0; i < nodeCount - 1; i++) {
-        const type = Math.random() > 0.5 ? 'Before' : 'After';
-        rawPremises.push({ s: activeNodes[i], t: activeNodes[i+1], type });
+      let attempts = 0;
+      while (attempts < 20) {
+        rawPremises = [];
+        const premiseCount = nodeCount;
+        for (let k = 0; k < premiseCount; k++) {
+          let i = Math.floor(Math.random() * nodeCount);
+          let j = Math.floor(Math.random() * nodeCount);
+          while (i === j) j = Math.floor(Math.random() * nodeCount);
+          if (i > j) [i, j] = [j, i]; // i is earlier than j
+          
+          if (Math.random() > 0.5) {
+            rawPremises.push({ s: activeNodes[i], t: activeNodes[j], type: 'Before' });
+          } else {
+            rawPremises.push({ s: activeNodes[j], t: activeNodes[i], type: 'After' });
+          }
+        }
+
+        // Reuse the Comparison solver by mapping Before -> Greater (internal logic)
+        const mockPremises = rawPremises.map(p => ({
+          s: p.type === 'Before' ? p.s : p.t,
+          t: p.type === 'Before' ? p.t : p.s,
+          type: 'Greater' as const
+        }));
+        
+        const scores = solveComparison(activeNodes, mockPremises);
+        const vals = Object.values(scores);
+        // "Greater" here means earlier in sequence ground truth [0] > [1]
+        const targetVal = wantEarliest ? Math.max(...vals) : Math.min(...vals);
+        const candidates = activeNodes.filter(n => scores[n] === targetVal);
+
+        if (candidates.length === 1) {
+          correctAnswer = candidates[0];
+          break;
+        }
+        attempts++;
       }
 
       const basePremises = rawPremises.map(p => `${p.s} ${getCue(p.type)} ${p.t}`);
       premises = finalize(injectNoise(basePremises, words.slice(nodeCount, nodeCount + 3)));
       
-      const wantEarliest = Math.random() > 0.5;
-      correctAnswer = wantEarliest ? activeNodes[0] : activeNodes[nodeCount - 1];
       question = useNaturalLanguage 
         ? (wantEarliest ? `WHICH HAPPENS FIRST?` : `WHICH HAPPENS LAST?`)
         : (wantEarliest ? `TARGET: TEMPORAL START` : `TARGET: TEMPORAL END`);
 
       options = shuffle(activeNodes.slice(0, 4));
-      if (!options.includes(correctAnswer)) options[0] = correctAnswer;
+      if (!options.includes(correctAnswer)) options[Math.floor(Math.random() * options.length)] = correctAnswer;
       options = shuffle(options);
       explanation = `Temporal Sequencing: Sequential event links require building a chronological timeline.`;
       break;
     }
 
     case FrameType.SPATIAL: {
-      const nodeCount = Math.min(3 + Math.floor(difficulty / 25), 5);
-      const activeNodes = words.slice(0, nodeCount);
-      const rawPremises: {s: string, t: string, type: 'Greater' | 'Lesser'}[] = []; // Reusing Greater/Lesser logic for Above/Below
-      
-      for (let i = 0; i < nodeCount - 1; i++) {
-        rawPremises.push({ s: activeNodes[i], t: activeNodes[i+1], type: 'Greater' });
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 25), 6);
+      const activeNodes = words.slice(0, nodeCount); // Truth: [0] is Highest/Top
+      let rawPremises: {s: string, t: string, type: 'Greater' | 'Lesser'}[] = [];
+      let targetA = "", targetB = "";
+      let checkRelation = 'Greater'; // Asking "Is A Greater (Above) B?"
+
+      let attempts = 0;
+      while (attempts < 20) {
+        rawPremises = [];
+        const premiseCount = nodeCount; // Scramble: create N random links
+        for (let k = 0; k < premiseCount; k++) {
+          let i = Math.floor(Math.random() * nodeCount);
+          let j = Math.floor(Math.random() * nodeCount);
+          while (i === j) j = Math.floor(Math.random() * nodeCount);
+          if (i > j) [i, j] = [j, i]; // Enforce logical consistency with Truth (i is Top/Greater)
+          
+          if (Math.random() > 0.5) {
+            rawPremises.push({ s: activeNodes[i], t: activeNodes[j], type: 'Greater' });
+          } else {
+            rawPremises.push({ s: activeNodes[j], t: activeNodes[i], type: 'Lesser' });
+          }
+        }
+
+        // Pick two distinct random nodes to query
+        const idxA = Math.floor(Math.random() * nodeCount);
+        let idxB = Math.floor(Math.random() * nodeCount);
+        while (idxA === idxB) idxB = Math.floor(Math.random() * nodeCount);
+        
+        targetA = activeNodes[idxA];
+        targetB = activeNodes[idxB];
+        
+        // Truth check: idxA < idxB means A is Higher (Greater) -> True
+        // We verify if we can PROVE it via premises.
+        // We check if path A -> B exists (meaning A > ... > B)
+        const isConnected = checkConnectivity(targetA, targetB, rawPremises);
+        
+        if (isConnected) {
+          // A is definitely above B
+          checkRelation = 'Greater';
+          correctAnswer = "Yes";
+          break;
+        }
+
+        // Check reverse path B -> A (meaning B > ... > A, so A is Below B)
+        const isReverseConnected = checkConnectivity(targetB, targetA, rawPremises);
+        if (isReverseConnected) {
+           // A is definitely below B
+           checkRelation = 'Greater'; // "Is A Greater B?" -> No, because B > A
+           correctAnswer = "No";
+           break;
+        }
+        
+        // If neither connected, it's undetermined loop again or allow "Undetermined" if desired?
+        // User wants solvable networks. We'll loop to find a solvable pair.
+        attempts++;
       }
 
-      premises = finalize(rawPremises.map(p => `${p.s} ${getCue('Greater')} ${p.t}`));
+      const basePremises = rawPremises.map(p => `${p.s} ${getCue('Greater')} ${p.t}`); 
+      premises = finalize(injectNoise(basePremises, words.slice(nodeCount, nodeCount + 3)));
       
-      const targetIdx = Math.floor(Math.random() * nodeCount);
-      correctAnswer = activeNodes[targetIdx];
-      
-      const queryIdx = (targetIdx + (Math.random() > 0.5 ? 1 : -1) + nodeCount) % nodeCount;
-      const rel = targetIdx < queryIdx ? 'Greater' : 'Lesser';
-      
-      question = `${activeNodes[targetIdx]} ${getCue(rel)} ${activeNodes[queryIdx]}?`;
-      correctAnswer = "Yes";
+      const relText = checkRelation === 'Greater' ? 'ABOVE' : 'BELOW';
+      question = useNaturalLanguage 
+        ? `${targetA} ${relText} ${targetB}?`
+        : `${targetA} ${getCue('Greater')} ${targetB}?`;
+        
+      if (correctAnswer === "") correctAnswer = "Undetermined"; 
+      // Fallback if loop failed (should be rare with 20 attempts on small graph)
+
       options = ["Yes", "No", "Undetermined"];
-      explanation = `Spatial Orientation: Positional relations define a coordinate-based network.`;
+      explanation = `Spatial Orientation: Combinatorial entailment of relative positions.`;
       break;
     }
 
