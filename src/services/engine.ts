@@ -108,7 +108,6 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       premises = finalize(injectNoise(rawPremises, words.slice(nodeCount, nodeCount + 3)));
       
       // Question: Relate first and last
-      const isStart = Math.random() > 0.5;
       const targetA = activeNodes[0];
       const targetB = activeNodes[nodeCount - 1];
       
