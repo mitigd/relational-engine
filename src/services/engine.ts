@@ -475,7 +475,7 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       // Let's implement pure Same As chain first for clarity, or alternating.
       // If A=B, B=C -> A=C.
       
-      let currentVal = func.attr; // Tracking value prop from 0 to end
+      // Actually we just generate premises.
       // Actually we just generate premises.
       
       for (let i = 0; i < nodeCount - 1; i++) {
@@ -583,7 +583,7 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       
       // Generate chain with random relation types
       // A R1 B R2 C ...
-      const types = ['Same As', 'Opposite', 'Greater']; 
+      // Logic tracing:
       // Logic tracing:
       // Start at 0.
       // If we ask relation between A and Z?
