@@ -23,7 +23,18 @@ export const ARBITRARY_CUES: Record<string, string> = {
   'Contains': 'WUG',
   'Before': 'SKRIT',
   'After': 'VOK',
-  'Perspective': 'TEN' 
+  'Perspective': 'TEN',
+  'North': 'NORT',
+  'South': 'SUD',
+  'East': 'EST',
+  'West': 'WES',
+  'Up': 'SUP',
+  'Down': 'INF',
+  'Left': 'SIN',
+  'Right': 'DEX',
+  'Front': 'ANT',
+  'Back': 'POS',
+  'Same Location': 'LOC'
 };
 
 const shuffle = <T,>(array: T[]): T[] => {
@@ -282,76 +293,150 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
     }
 
     case FrameType.SPATIAL: {
-      const nodeCount = Math.min(3 + Math.floor(difficulty / 25), 6);
-      const activeNodes = words.slice(0, nodeCount); // Truth: [0] is Highest/Top
-      let rawPremises: {s: string, t: string, type: 'Greater' | 'Lesser'}[] = [];
-      let targetA = "", targetB = "";
-      let checkRelation = 'Greater'; // Asking "Is A Greater (Above) B?"
-
-      let attempts = 0;
-      while (attempts < 20) {
-        rawPremises = [];
-        const premiseCount = nodeCount; // Scramble: create N random links
-        for (let k = 0; k < premiseCount; k++) {
-          let i = Math.floor(Math.random() * nodeCount);
-          let j = Math.floor(Math.random() * nodeCount);
-          while (i === j) j = Math.floor(Math.random() * nodeCount);
-          if (i > j) [i, j] = [j, i]; // Enforce logical consistency with Truth (i is Top/Greater)
-          
-          if (Math.random() > 0.5) {
-            rawPremises.push({ s: activeNodes[i], t: activeNodes[j], type: 'Greater' });
-          } else {
-            rawPremises.push({ s: activeNodes[j], t: activeNodes[i], type: 'Lesser' });
-          }
-        }
-
-        // Pick two distinct random nodes to query
-        const idxA = Math.floor(Math.random() * nodeCount);
-        let idxB = Math.floor(Math.random() * nodeCount);
-        while (idxA === idxB) idxB = Math.floor(Math.random() * nodeCount);
-        
-        targetA = activeNodes[idxA];
-        targetB = activeNodes[idxB];
-        
-        // Truth check: idxA < idxB means A is Higher (Greater) -> True
-        // We verify if we can PROVE it via premises.
-        // We check if path A -> B exists (meaning A > ... > B)
-        const isConnected = checkConnectivity(targetA, targetB, rawPremises);
-        
-        if (isConnected) {
-          // A is definitely above B
-          checkRelation = 'Greater';
-          correctAnswer = "Yes";
-          break;
-        }
-
-        // Check reverse path B -> A (meaning B > ... > A, so A is Below B)
-        const isReverseConnected = checkConnectivity(targetB, targetA, rawPremises);
-        if (isReverseConnected) {
-           // A is definitely below B
-           checkRelation = 'Greater'; // "Is A Greater B?" -> No, because B > A
-           correctAnswer = "No";
-           break;
-        }
-        
-        // If neither connected, it's undetermined loop again or allow "Undetermined" if desired?
-        // User wants solvable networks. We'll loop to find a solvable pair.
-        attempts++;
+      const nodeCount = Math.min(3 + Math.floor(difficulty / 20), 6);
+      const activeNodes = words.slice(0, nodeCount);
+      const is3D = difficulty > 60; // Enable 3D (Up/Down) at higher difficulties
+      
+      // 1. Generate Map (Coordinate System)
+      const coords: Record<string, {x: number, y: number, z: number}> = {};
+      const occupied = new Set<string>();
+      
+      // Place first node at origin
+      coords[activeNodes[0]] = {x: 0, y: 0, z: 0};
+      occupied.add("0,0,0");
+      
+      const directions = [
+        {name: 'North', dx: 0, dy: 1, dz: 0},
+        {name: 'South', dx: 0, dy: -1, dz: 0},
+        {name: 'East', dx: 1, dy: 0, dz: 0},
+        {name: 'West', dx: -1, dy: 0, dz: 0}
+      ];
+      if (is3D) {
+        directions.push({name: 'Up', dx: 0, dy: 0, dz: 1});
+        directions.push({name: 'Down', dx: 0, dy: 0, dz: -1});
       }
 
-      const basePremises = rawPremises.map(p => `${p.s} ${getCue('Greater')} ${p.t}`); 
-      premises = finalize(injectNoise(basePremises, words.slice(nodeCount, nodeCount + 3)));
-      
-      const relText = checkRelation === 'Greater' ? 'ABOVE' : 'BELOW';
-      question = useNaturalLanguage 
-        ? `${targetA} ${relText} ${targetB}?`
-        : `${targetA} ${getCue('Greater')} ${targetB}?`;
-        
-      if (correctAnswer === "") correctAnswer = "Undetermined"; 
-      // Fallback if loop failed (should be rare with 20 attempts on small graph)
+      const rawPremises: string[] = [];
+      const edges: {s: string, t: string, dir: string}[] = [];
 
-      options = ["Yes", "No", "Undetermined"];
-      explanation = `Spatial Orientation: Combinatorial entailment of relative positions.`;
+      // Grow the map
+      for (let i = 1; i < nodeCount; i++) {
+        let placed = false;
+        let attempts = 0;
+        
+        while (!placed && attempts < 50) {
+           const anchorIdx = Math.floor(Math.random() * i);
+           const anchorNode = activeNodes[anchorIdx];
+           const anchorPos = coords[anchorNode];
+           const dir = directions[Math.floor(Math.random() * directions.length)];
+           
+           const newX = anchorPos.x + dir.dx;
+           const newY = anchorPos.y + dir.dy;
+           const newZ = anchorPos.z + dir.dz;
+           const key = `${newX},${newY},${newZ}`;
+           
+           if (!occupied.has(key)) {
+             coords[activeNodes[i]] = {x: newX, y: newY, z: newZ};
+             occupied.add(key);
+             edges.push({s: activeNodes[i], t: anchorNode, dir: dir.name});
+             placed = true;
+           }
+           attempts++;
+        }
+        
+        if (!placed) {
+          coords[activeNodes[i]] = {x: i * 10, y: 0, z: 0}; 
+          edges.push({s: activeNodes[i], t: activeNodes[i-1], dir: 'East'});
+        }
+      }
+
+      // 2. Generate Premises
+      for (let i = 0; i < nodeCount; i++) {
+        for (let j = i + 1; j < nodeCount; j++) {
+           const p1 = coords[activeNodes[i]];
+           const p2 = coords[activeNodes[j]];
+           
+           const dx = p1.x - p2.x;
+           const dy = p1.y - p2.y;
+           const dz = p1.z - p2.z;
+           const dist = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+           
+           if (dist === 1) {
+             let dirName = "";
+             if (dx === 1) dirName = 'East';
+             else if (dx === -1) dirName = 'West';
+             else if (dy === 1) dirName = 'North';
+             else if (dy === -1) dirName = 'South';
+             else if (dz === 1) dirName = 'Up';
+             else if (dz === -1) dirName = 'Down';
+             
+             // Check if this edge is already explicitly in 'edges' to avoid duplicates?
+             // Actually, duplications usually verify understanding. We can add it.
+             // But we want to avoid trivial tautologies.
+             // Let's rely on 'edges' for PRIMARY premises, and maybe add 1-2 derived links as random hints?
+             // For now, let's just stick to the spanning tree + random extra links if adjacent.
+              if (Math.random() > 0.3) { // 70% chance to reveal adjacent neighbor
+                  rawPremises.push(`${activeNodes[i]} ${getCue(dirName)} ${activeNodes[j]}`);
+              }
+           }
+        }
+      }
+      
+      // Ensure the core spanning tree is included so it's connected
+      edges.forEach(e => {
+          // If not already added?
+          // Simplest is to just add them all.
+          rawPremises.push(`${e.s} ${getCue(e.dir)} ${e.t}`);
+      });
+      // Remove duplicates strings if any
+      const uniquePremises = Array.from(new Set(rawPremises));
+      premises = finalize(injectNoise(uniquePremises, words.slice(nodeCount, nodeCount + 3)));
+
+      // 3. Scenario Setup (Deictic Shift)
+      const playerNode = activeNodes[Math.floor(Math.random() * nodeCount)];
+      const playerPos = coords[playerNode];
+      const facingDir = ['North', 'South', 'East', 'West'][Math.floor(Math.random() * 4)];
+      
+      let targetNode = playerNode;
+      while (targetNode === playerNode) {
+         targetNode = activeNodes[Math.floor(Math.random() * nodeCount)];
+      }
+      const targetPos = coords[targetNode];
+
+      // 4. Calculate Vector
+      const vecX = targetPos.x - playerPos.x;
+      const vecY = targetPos.y - playerPos.y;
+      const vecZ = targetPos.z - playerPos.z;
+
+      // 5. Rotate Vector
+      const fwd = directions.find(d => d.name === facingDir)!;
+      let rightDx = 0, rightDy = 0;
+      if (facingDir === 'North') { rightDx = 1; rightDy = 0; }
+      if (facingDir === 'South') { rightDx = -1; rightDy = 0; }
+      if (facingDir === 'East') { rightDx = 0; rightDy = -1; }
+      if (facingDir === 'West') { rightDx = 0; rightDy = 1; }
+      
+      const localFwd = vecX * fwd.dx + vecY * fwd.dy;
+      const localRight = vecX * rightDx + vecY * rightDy;
+      const localUp = vecZ;
+
+      // 6. Determine Answer and Query
+      const distinctOptions = ['Left', 'Right', 'Front', 'Back', 'Up', 'Down', 'Same Location'].filter(o => getCue(o));
+      const queryDir = distinctOptions[Math.floor(Math.random() * distinctOptions.length)];
+      
+      let isTrue = false;
+      if (queryDir === 'Left') isTrue = localRight < 0;
+      if (queryDir === 'Right') isTrue = localRight > 0;
+      if (queryDir === 'Front') isTrue = localFwd > 0;
+      if (queryDir === 'Back') isTrue = localFwd < 0;
+      if (queryDir === 'Up') isTrue = localUp > 0;
+      if (queryDir === 'Down') isTrue = localUp < 0;
+      if (queryDir === 'Same Location') isTrue = (localFwd === 0 && localRight === 0 && localUp === 0);
+
+      question = `You are at ${playerNode} facing ${getCue(facingDir)}. Is ${targetNode} to your ${getCue(queryDir)}?`;
+      correctAnswer = isTrue ? "Yes" : "No";
+      options = ["Yes", "No"]; // Simple Boolean validation
+      explanation = `Spatial Perspective: Coordinate transformation relative to observer's orientation.`;
       break;
     }
 
