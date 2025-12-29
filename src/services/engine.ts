@@ -62,28 +62,6 @@ const solveComparison = (nodes: string[], premises: {s: string, t: string, type:
   return score;
 };
 
-const checkConnectivity = (source: string, target: string, premises: {s: string, t: string, type: 'Greater'|'Lesser'}[]) => {
-  // Build adjacency list for "s is Greater (Above) t"
-  // Premise s > t comes from s Greater t OR t Lesser s
-  const adj: Record<string, string[]> = {};
-  premises.forEach(p => {
-    const [u, v] = p.type === 'Greater' ? [p.s, p.t] : [p.t, p.s];
-    if (!adj[u]) adj[u] = [];
-    adj[u].push(v);
-  });
-
-  const queue = [source];
-  const visited = new Set<string>();
-  
-  while (queue.length > 0) {
-    const curr = queue.shift()!;
-    if (curr === target) return true;
-    if (visited.has(curr)) continue;
-    visited.add(curr);
-    if (adj[curr]) queue.push(...adj[curr]);
-  }
-  return false;
-};
 
 export const generateChallenge = (frame: FrameType, difficulty: number, useNaturalLanguage: boolean = false): Challenge => {
   const id = Math.random().toString(36).substr(2, 9);
@@ -137,11 +115,6 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       const activeNodes = words.slice(0, nodeCount);
       const rawPremises: string[] = [];
       
-      // Create two groups. ActiveNodes[0..k] are Group A. ActiveNodes[k+1..end] are Group B.
-      // Link internals with "Same As". Link groups with "Different From" (using Opposite/Distinct cue).
-      // Let's use 'Different' mapping to 'Opposite' cue for now or a specific one if available. 
-      // Constants say 'Opposite'. We can use that implies distinctive.
-      
       const split = Math.floor(nodeCount / 2);
       
       // Group 1
@@ -149,7 +122,7 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
          rawPremises.push(`${activeNodes[i]} ${getCue('Same As')} ${activeNodes[i+1]}`);
       }
       // Link Group 1 to Group 2 via Difference
-      rawPremises.push(`${activeNodes[split]} ${getCue('Opposite')} ${activeNodes[split+1]}`);
+      rawPremises.push(`${activeNodes[split]} ${getCue('Different')} ${activeNodes[split+1]}`);
       // Group 2
       for (let i = split + 1; i < nodeCount - 1; i++) {
          rawPremises.push(`${activeNodes[i]} ${getCue('Same As')} ${activeNodes[i+1]}`);
@@ -166,8 +139,6 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       const nodeB = activeNodes[idxB];
       
       // Determine logical relation
-      // If both <= split or both > split, they are Same.
-      // If one <= split and other > split, they are Different.
       const groupA = idxA <= split ? 1 : 2;
       const groupB = idxB <= split ? 1 : 2;
       
@@ -175,11 +146,11 @@ export const generateChallenge = (frame: FrameType, difficulty: number, useNatur
       
       question = useNaturalLanguage
         ? `IS ${nodeA} DIFFERENT FROM ${nodeB}?`
-        : `${nodeA} ${getCue('Opposite')} ${nodeB}?`;
+        : `${nodeA} ${getCue('Different')} ${nodeB}?`;
         
       correctAnswer = areSame ? "No" : "Yes";
       options = ["Yes", "No", "Undetermined"];
-      explanation = `Distinction: 'Different' relations separate identity groups.`;
+      explanation = `Distinction: 'Different' relations separate identity groups (Discrimination).`;
       break;
     }
 
